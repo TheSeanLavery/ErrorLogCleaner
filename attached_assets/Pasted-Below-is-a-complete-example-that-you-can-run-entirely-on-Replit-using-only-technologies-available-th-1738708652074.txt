@@ -1,0 +1,423 @@
+Below is a complete example that you can run entirely on Replit using only technologies available there. In this example, we’ll use a Node.js/Express backend (which runs as a single process on Replit) and a Vite + React frontend. The backend uses Express with CORS and the [express-rate-limit](https://www.npmjs.com/package/express-rate-limit) middleware to enforce per-client limits. (No database is used.) The frontend uses local state only and includes a simple text area (with optional file upload) where the user pastes the error log. A local deduplication function compresses consecutive duplicate lines before sending the (cleaned) log to the backend. The backend then calls the OpenAI API (using your API key stored in an environment variable) and returns its “cleaned” output. Finally, the frontend computes a diff between the deduplicated log and the OpenAI-cleaned log, showing removed lines in red in a left-hand diff pane while displaying the cleaned version on the right. Both panels scroll in sync.
+
+Below is the complete source code for both frontend and backend.
+
+---
+
+## Project Structure
+
+```
+/ (project root)
+ ├─ client/           # Vite React frontend
+ │   ├─ package.json
+ │   ├─ vite.config.js
+ │   └─ src/
+ │       ├─ main.jsx
+ │       ├─ App.jsx
+ │       └─ index.css
+ ├─ server/           # Express backend
+ │   ├─ package.json
+ │   └─ index.js
+ └─ .env              # Contains OPENAI_API_KEY (do not commit this file)
+```
+
+You can create a Replit “Node.js” project and then add the two folders (“client” and “server”) inside it. (You can run the two parts in separate consoles if needed.)
+
+---
+
+## Backend Code (Node.js/Express)
+
+### server/package.json
+
+```json
+{
+  "name": "error-cleaner-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.7.0"
+  }
+}
+```
+
+### server/index.js
+
+```js
+const express = require('express');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+const axios = require('axios');
+require('dotenv').config();
+
+const app = express();
+const port = process.env.PORT || 3001;
+
+// Parse JSON bodies and enable CORS
+app.use(express.json());
+app.use(cors());
+
+// Rate limiting: allow max 5 requests per minute per IP
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  message: 'Too many requests from this IP, please try again after a minute.',
+});
+app.use(limiter);
+
+/**
+ * POST /api/clean-log
+ * Expects JSON body: { log: "error log text" }
+ * Calls the OpenAI API with the provided log (after deduplication done client-side)
+ */
+app.post('/api/clean-log', async (req, res) => {
+  const { log } = req.body;
+  if (!log) {
+    return res.status(400).json({ error: 'Missing log in request body.' });
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an assistant that removes non-critical error messages, duplicates, and irrelevant content from error logs.',
+          },
+          { role: 'user', content: log },
+        ],
+        temperature: 0.0,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+      }
+    );
+
+    const cleaned = response.data.choices[0].message.content;
+    res.json({ cleaned });
+  } catch (error) {
+    console.error(
+      'Error calling OpenAI:',
+      error.response ? error.response.data : error.message
+    );
+    res.status(500).json({ error: 'Error processing log.' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
+```
+
+> **Note:** Create a file called `.env` in the project root (or inside the server folder, as your Replit setup requires) containing your OpenAI API key:
+>
+> ```
+> OPENAI_API_KEY=your_openai_api_key_here
+> ```
+
+---
+
+## Frontend Code (Vite + React)
+
+### client/package.json
+
+```json
+{
+  "name": "error-cleaner-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "diff": "^5.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^3.1.0",
+    "vite": "^4.0.0"
+  }
+}
+```
+
+### client/vite.config.js
+
+```js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()]
+});
+```
+
+### client/src/main.jsx
+
+```jsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+### client/src/App.jsx
+
+```jsx
+import React, { useState, useRef, useEffect } from 'react';
+import { diffLines } from 'diff';
+
+// Simple deduplication: compresses consecutive duplicate lines.
+function deduplicateLog(log) {
+  const lines = log.split('\n');
+  const result = [];
+  let currentLine = null;
+  let count = 0;
+
+  for (let line of lines) {
+    if (line === currentLine) {
+      count++;
+    } else {
+      if (currentLine !== null) {
+        result.push(count > 1 ? `${currentLine} [x${count}]` : currentLine);
+      }
+      currentLine = line;
+      count = 1;
+    }
+  }
+  if (currentLine !== null) {
+    result.push(count > 1 ? `${currentLine} [x${count}]` : currentLine);
+  }
+  return result.join('\n');
+}
+
+function App() {
+  const [inputLog, setInputLog] = useState('');
+  const [dedupedLog, setDedupedLog] = useState('');
+  const [cleanedLog, setCleanedLog] = useState('');
+  const [diffParts, setDiffParts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const leftPanelRef = useRef(null);
+  const rightPanelRef = useRef(null);
+
+  // Synchronize scrolling between the two panels.
+  const syncScroll = (sourceRef, targetRef) => {
+    if (sourceRef.current && targetRef.current) {
+      targetRef.current.scrollTop = sourceRef.current.scrollTop;
+    }
+  };
+
+  // Handle file uploads for text logs.
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setInputLog(event.target.result);
+    };
+    reader.readAsText(file);
+  };
+
+  // Perform deduplication locally.
+  const handleDeduplicate = () => {
+    const deduped = deduplicateLog(inputLog);
+    setDedupedLog(deduped);
+  };
+
+  // Send deduplicated log to backend for further cleaning.
+  const handleClean = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('http://localhost:3001/api/clean-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ log: dedupedLog })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Unknown error');
+      }
+      const data = await response.json();
+      setCleanedLog(data.cleaned);
+    } catch (err) {
+      setError(err.message);
+    }
+    setLoading(false);
+  };
+
+  // Recalculate diff whenever dedupedLog and cleanedLog are updated.
+  useEffect(() => {
+    if (dedupedLog && cleanedLog) {
+      const parts = diffLines(dedupedLog, cleanedLog);
+      setDiffParts(parts);
+    }
+  }, [dedupedLog, cleanedLog]);
+
+  return (
+    <div className="container">
+      <h1>Error Log Cleaner</h1>
+
+      <div className="input-section">
+        <textarea
+          placeholder="Paste your error log here..."
+          value={inputLog}
+          onChange={(e) => setInputLog(e.target.value)}
+          rows={10}
+          style={{ width: '100%' }}
+        ></textarea>
+        <div>
+          <input type="file" accept=".txt,.log" onChange={handleFileUpload} />
+        </div>
+        <button onClick={handleDeduplicate}>Deduplicate Log (Local)</button>
+      </div>
+
+      <div className="actions">
+        <button onClick={handleClean} disabled={loading || !dedupedLog}>
+          {loading ? 'Cleaning...' : 'Clean Log via OpenAI'}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {dedupedLog && cleanedLog && (
+        <div className="diff-container">
+          <div
+            className="panel left-panel"
+            ref={leftPanelRef}
+            onScroll={() => syncScroll(leftPanelRef, rightPanelRef)}
+          >
+            <h2>Diff View (Removed in Red)</h2>
+            <pre>
+              {diffParts.map((part, index) => {
+                const style = {
+                  backgroundColor: part.removed ? 'rgba(255, 0, 0, 0.3)' : 'transparent',
+                  textDecoration: part.removed ? 'line-through' : 'none'
+                };
+                return (
+                  <span key={index} style={style}>
+                    {part.value}
+                  </span>
+                );
+              })}
+            </pre>
+          </div>
+          <div
+            className="panel right-panel"
+            ref={rightPanelRef}
+            onScroll={() => syncScroll(rightPanelRef, leftPanelRef)}
+          >
+            <h2>Cleaned Log</h2>
+            <pre>{cleanedLog}</pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
+```
+
+### client/src/index.css
+
+```css
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 10px;
+}
+
+.input-section {
+  margin-bottom: 20px;
+}
+
+.actions {
+  margin-bottom: 20px;
+}
+
+.error {
+  color: red;
+  margin-bottom: 10px;
+}
+
+.diff-container {
+  display: flex;
+  gap: 20px;
+}
+
+.panel {
+  flex: 1;
+  border: 1px solid #ccc;
+  padding: 10px;
+  height: 400px;
+  overflow-y: scroll;
+  background-color: #f9f9f9;
+}
+
+.left-panel pre,
+.right-panel pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+```
+
+---
+
+## Running the Project on Replit
+
+1. **Backend:**  
+   Open a shell in the `server` folder and run:
+   ```bash
+   npm install
+   npm start
+   ```
+   (Make sure your `.env` file is set up with your OpenAI API key.)
+
+2. **Frontend:**  
+   Open a second shell (or a new Replit tab) in the `client` folder and run:
+   ```bash
+   npm install
+   npm run dev
+   ```
+   Vite will start a development server (by default on port 3000). Adjust the API URL in `App.jsx` if necessary (for example, if Replit exposes different ports or domains).
+
+3. **Usage:**  
+   - Paste or upload your error log in the textarea.
+   - Click **Deduplicate Log (Local)** to compress duplicate lines.
+   - Click **Clean Log via OpenAI** to send the deduplicated log to your backend (which calls the OpenAI API).
+   - When the response is returned, a side-by-side diff view appears:
+     - The left panel shows a diff with removed lines highlighted in red.
+     - The right panel displays the cleaned log.
+   - The two panels scroll in sync.
+
+This setup uses only technologies available on Replit and keeps the stack simple: a Node.js/Express backend and a Vite React frontend with local state management and basic diffing. You can later add features (like a Pro version) on a separate sister site if needed.
+
+Happy coding!
