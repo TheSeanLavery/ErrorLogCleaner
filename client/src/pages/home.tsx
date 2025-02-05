@@ -124,8 +124,8 @@ export default function Home() {
       const data = await response.json();
       setCleanedLog(data.cleaned);
 
-      // Calculate diff between deduped and cleaned logs
-      const parts = diffLines(dedupedLog, data.cleaned);
+      // Calculate diff between original and cleaned logs
+      const parts = diffLines(inputLog, data.cleaned);
       setDiffParts(parts);
 
       toast({
