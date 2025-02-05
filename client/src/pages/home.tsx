@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { diffLines } from "diff";
-import { Upload, CheckCircle, AlertCircle, Loader2, Download, Copy } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, Download, Copy, Info } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
@@ -191,6 +191,26 @@ export default function Home() {
             Clean and deduplicate your error logs using AI
           </p>
         </div>
+
+        <Card className="p-6 bg-muted/50">
+          <div className="flex gap-4 items-start">
+            <Info className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+            <div className="space-y-2">
+              <h2 className="font-semibold">How it works</h2>
+              <ol className="space-y-2 text-sm text-muted-foreground">
+                <li>1. Paste or upload your log file</li>
+                <li>2. Press <span className="font-medium text-foreground">Clean & Deduplicate with AI</span></li>
+                <li>3. The system will:
+                  <ul className="ml-4 mt-1 space-y-1">
+                    <li>• Automatically deduplicate repeated errors using advanced algorithms</li>
+                    <li>• Process the result with gpt-4o-mini for intelligent cleanup</li>
+                    <li>• Remove non-critical errors and unhelpful log entries</li>
+                  </ul>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </Card>
 
         <Card className="p-6">
           <div className="space-y-4">
