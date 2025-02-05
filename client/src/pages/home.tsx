@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { diffLines } from "diff";
-import { FileText, Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { FileText, Upload, CheckCircle, AlertCircle, Loader2, Download } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
@@ -26,12 +26,24 @@ function deduplicateLog(log: string): string {
       count = 1;
     }
   }
-  
+
   if (currentLine !== null) {
     result.push(count > 1 ? `${currentLine} [x${count}]` : currentLine);
   }
-  
+
   return result.join('\n');
+}
+
+function downloadTextFile(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
 }
 
 export default function Home() {
@@ -41,7 +53,7 @@ export default function Home() {
   const [diffParts, setDiffParts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  
+
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +98,7 @@ export default function Home() {
       setCleanedLog(data.cleaned);
       const parts = diffLines(dedupedLog, data.cleaned);
       setDiffParts(parts);
-      
+
       toast({
         title: "Success",
         description: "Log cleaned successfully",
@@ -100,6 +112,25 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleExport = () => {
+    if (!cleanedLog) {
+      toast({
+        title: "Error",
+        description: "No cleaned log to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadTextFile(cleanedLog, `cleaned-log-${timestamp}.txt`);
+
+    toast({
+      title: "Success",
+      description: "Log exported successfully",
+    });
   };
 
   const syncScroll = (source: HTMLDivElement, target: HTMLDivElement) => {
@@ -124,7 +155,7 @@ export default function Home() {
               onChange={(e) => setInputLog(e.target.value)}
               className="min-h-[200px] font-mono"
             />
-            
+
             <div className="flex flex-wrap gap-4">
               <div className="flex-1">
                 <input
@@ -198,10 +229,21 @@ export default function Home() {
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                Cleaned Log
-              </h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  Cleaned Log
+                </h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={!cleanedLog}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+              </div>
               <ScrollArea
                 ref={rightPanelRef}
                 className="h-[400px] rounded-md border"
