@@ -11,27 +11,46 @@ import { cn } from "@/lib/utils";
 
 function deduplicateLog(log: string): string {
   const lines = log.split('\n');
-  const result = [];
-  let currentLine = null;
-  let count = 0;
+  const blocks: string[][] = [];
+  let currentBlock: string[] = [];
 
+  // Split into blocks (separated by empty lines)
   for (let line of lines) {
-    if (line === currentLine) {
-      count++;
-    } else {
-      if (currentLine !== null) {
-        result.push(count > 1 ? `${currentLine} [x${count}]` : currentLine);
+    if (line.trim() === '') {
+      if (currentBlock.length > 0) {
+        blocks.push(currentBlock);
+        currentBlock = [];
       }
-      currentLine = line;
-      count = 1;
+    } else {
+      currentBlock.push(line);
+    }
+  }
+  if (currentBlock.length > 0) {
+    blocks.push(currentBlock);
+  }
+
+  // Count duplicate blocks
+  const blockCounts = new Map<string, number>();
+  const uniqueBlocks: string[][] = [];
+
+  for (let block of blocks) {
+    const blockStr = block.join('\n');
+    if (blockCounts.has(blockStr)) {
+      blockCounts.set(blockStr, blockCounts.get(blockStr)! + 1);
+    } else {
+      blockCounts.set(blockStr, 1);
+      uniqueBlocks.push(block);
     }
   }
 
-  if (currentLine !== null) {
-    result.push(count > 1 ? `${currentLine} [x${count}]` : currentLine);
-  }
+  // Format output with counts
+  const result = uniqueBlocks.map(block => {
+    const blockStr = block.join('\n');
+    const count = blockCounts.get(blockStr)!;
+    return count > 1 ? `${blockStr} [x${count}]` : blockStr;
+  });
 
-  return result.join('\n');
+  return result.join('\n\n');
 }
 
 function downloadTextFile(content: string, filename: string) {
