@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { diffLines } from "diff";
-import { FileText, Upload, CheckCircle, AlertCircle, Loader2, Download } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, Download } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
@@ -85,7 +85,6 @@ function downloadTextFile(content: string, filename: string) {
 
 export default function Home() {
   const [inputLog, setInputLog] = useState("");
-  const [dedupedLog, setDedupedLog] = useState("");
   const [cleanedLog, setCleanedLog] = useState("");
   const [diffParts, setDiffParts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -105,7 +104,7 @@ export default function Home() {
     reader.readAsText(file);
   };
 
-  const handleDeduplicate = () => {
+  const handleClean = async () => {
     if (!inputLog) {
       toast({
         title: "Error",
@@ -114,25 +113,18 @@ export default function Home() {
       });
       return;
     }
-    const deduped = deduplicateLog(inputLog);
-    setDedupedLog(deduped);
-  };
-
-  const handleClean = async () => {
-    if (!dedupedLog) {
-      toast({
-        title: "Error",
-        description: "Please deduplicate the log first",
-        variant: "destructive",
-      });
-      return;
-    }
 
     setIsLoading(true);
     try {
+      // First deduplicate the log
+      const dedupedLog = deduplicateLog(inputLog);
+
+      // Then send to AI for cleaning
       const response = await apiRequest("POST", "/api/clean-log", { log: dedupedLog });
       const data = await response.json();
       setCleanedLog(data.cleaned);
+
+      // Calculate diff between deduped and cleaned logs
       const parts = diffLines(dedupedLog, data.cleaned);
       setDiffParts(parts);
 
@@ -213,18 +205,8 @@ export default function Home() {
               </div>
 
               <Button
-                variant="secondary"
-                onClick={handleDeduplicate}
-                disabled={!inputLog}
-                className="flex-1"
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                Deduplicate Log
-              </Button>
-
-              <Button
                 onClick={handleClean}
-                disabled={!dedupedLog || isLoading}
+                disabled={!inputLog || isLoading}
                 className="flex-1"
               >
                 {isLoading ? (
@@ -232,13 +214,13 @@ export default function Home() {
                 ) : (
                   <CheckCircle className="mr-2 h-4 w-4" />
                 )}
-                Clean Log with AI
+                Clean & Deduplicate with AI
               </Button>
             </div>
           </div>
         </Card>
 
-        {dedupedLog && cleanedLog && (
+        {cleanedLog && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
