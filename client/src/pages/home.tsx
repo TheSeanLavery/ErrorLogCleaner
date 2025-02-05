@@ -9,48 +9,66 @@ import { FileText, Upload, CheckCircle, AlertCircle, Loader2, Download } from "l
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
+function normalizeErrorMessage(message: string): string {
+  // Replace numbers and IDs with placeholders to help match similar errors
+  return message.replace(/\[[\w\s]+\]/g, '[ID]')
+                .replace(/\d+/g, '<num>')
+                .trim();
+}
+
 function deduplicateLog(log: string): string {
   const lines = log.split('\n');
-  const blocks: string[][] = [];
-  let currentBlock: string[] = [];
+  const errorCache = new Map<string, { count: number; originalMessage: string }>();
+  const processedLines: string[] = [];
+  let currentErrorBlock: string[] = [];
 
-  // Split into blocks (separated by empty lines)
-  for (let line of lines) {
-    if (line.trim() === '') {
-      if (currentBlock.length > 0) {
-        blocks.push(currentBlock);
-        currentBlock = [];
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // If empty line or last line, process the current block
+    if (line.trim() === '' || i === lines.length - 1) {
+      if (i === lines.length - 1 && line.trim() !== '') {
+        currentErrorBlock.push(line);
+      }
+
+      if (currentErrorBlock.length > 0) {
+        const originalBlock = currentErrorBlock.join('\n');
+        const normalizedBlock = normalizeErrorMessage(originalBlock);
+
+        if (errorCache.has(normalizedBlock)) {
+          const entry = errorCache.get(normalizedBlock)!;
+          entry.count++;
+        } else {
+          errorCache.set(normalizedBlock, {
+            count: 1,
+            originalMessage: originalBlock
+          });
+          processedLines.push(originalBlock);
+        }
+
+        currentErrorBlock = [];
+      }
+      if (line.trim() === '') {
+        processedLines.push('');
       }
     } else {
-      currentBlock.push(line);
-    }
-  }
-  if (currentBlock.length > 0) {
-    blocks.push(currentBlock);
-  }
-
-  // Count duplicate blocks
-  const blockCounts = new Map<string, number>();
-  const uniqueBlocks: string[][] = [];
-
-  for (let block of blocks) {
-    const blockStr = block.join('\n');
-    if (blockCounts.has(blockStr)) {
-      blockCounts.set(blockStr, blockCounts.get(blockStr)! + 1);
-    } else {
-      blockCounts.set(blockStr, 1);
-      uniqueBlocks.push(block);
+      currentErrorBlock.push(line);
     }
   }
 
   // Format output with counts
-  const result = uniqueBlocks.map(block => {
-    const blockStr = block.join('\n');
-    const count = blockCounts.get(blockStr)!;
-    return count > 1 ? `${blockStr} [x${count}]` : blockStr;
+  const result = processedLines.map(line => {
+    if (!line) return '';
+    const normalized = normalizeErrorMessage(line);
+    const entry = errorCache.get(normalized);
+    if (entry && entry.count > 1) {
+      return `${line} [x${entry.count}]`;
+    }
+    return line;
   });
 
-  return result.join('\n\n');
+  return result.join('\n');
 }
 
 function downloadTextFile(content: string, filename: string) {
