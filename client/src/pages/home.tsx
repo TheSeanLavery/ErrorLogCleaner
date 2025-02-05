@@ -5,12 +5,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { diffLines } from "diff";
-import { Upload, CheckCircle, AlertCircle, Loader2, Download } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, Download, Copy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 function normalizeErrorMessage(message: string): string {
-  // Replace numbers and IDs with placeholders to help match similar errors
   return message.replace(/\[[\w\s]+\]/g, '[ID]')
                 .replace(/\d+/g, '<num>')
                 .trim();
@@ -22,11 +21,9 @@ function deduplicateLog(log: string): string {
   const processedLines: string[] = [];
   let currentErrorBlock: string[] = [];
 
-  // Process each line
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // If empty line or last line, process the current block
     if (line.trim() === '' || i === lines.length - 1) {
       if (i === lines.length - 1 && line.trim() !== '') {
         currentErrorBlock.push(line);
@@ -57,7 +54,6 @@ function deduplicateLog(log: string): string {
     }
   }
 
-  // Format output with counts
   const result = processedLines.map(line => {
     if (!line) return '';
     const normalized = normalizeErrorMessage(line);
@@ -116,15 +112,10 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      // First deduplicate the log
       const dedupedLog = deduplicateLog(inputLog);
-
-      // Then send to AI for cleaning
       const response = await apiRequest("POST", "/api/clean-log", { log: dedupedLog });
       const data = await response.json();
       setCleanedLog(data.cleaned);
-
-      // Calculate diff between original and cleaned logs
       const parts = diffLines(inputLog, data.cleaned);
       setDiffParts(parts);
 
@@ -160,6 +151,31 @@ export default function Home() {
       title: "Success",
       description: "Log exported successfully",
     });
+  };
+
+  const handleCopy = async () => {
+    if (!cleanedLog) {
+      toast({
+        title: "Error",
+        description: "No cleaned log to copy",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(cleanedLog);
+      toast({
+        title: "Success",
+        description: "Log copied to clipboard",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to copy to clipboard",
+        variant: "destructive",
+      });
+    }
   };
 
   const syncScroll = (source: HTMLDivElement, target: HTMLDivElement) => {
@@ -253,15 +269,24 @@ export default function Home() {
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   Cleaned Log
                 </h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExport}
-                  disabled={!cleanedLog}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Export
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopy}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExport}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                  </Button>
+                </div>
               </div>
               <ScrollArea
                 ref={rightPanelRef}

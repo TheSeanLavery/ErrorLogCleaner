@@ -13,8 +13,8 @@ export function registerRoutes(app: Express): Server {
       const { log } = cleanLogRequestSchema.parse(req.body);
 
       const response = await openai.chat.completions.create({
-        // the newest OpenAI model is "gpt-4o" which was released May 13, 2024
-        model: "gpt-4o",
+        // the newest OpenAI model is "gpt-4o-mini" which was released May 13, 2024
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
