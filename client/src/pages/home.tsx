@@ -9,48 +9,72 @@ import { FileText, Upload, CheckCircle, AlertCircle, Loader2, Download } from "l
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
-// Normalize a log line by removing dynamic parts like timestamps, hex addresses, etc.
-function normalizeLine(line: string): string {
-  let normalized = line;
-  // Remove/replace common dynamic parts:
-  normalized = normalized.replace(/\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?/g, "<TIME>");
-  normalized = normalized.replace(/\[\w{3}\s+\d{2}\s+\d{2}:\d{2}:\d{2}\]/g, "<TIME>");
-  normalized = normalized.replace(/\b0x[0-9A-Fa-f]+\b/g, "<ADDR>");
-  normalized = normalized.replace(/\b\d{4,}\b/g, "<NUM>");
-  return normalized.trim();
+function normalizeErrorMessage(message: string): string {
+  // Replace numbers and IDs with placeholders to help match similar errors
+  return message.replace(/\[[\w\s]+\]/g, '[ID]')
+                .replace(/\d+/g, '<num>')
+                .trim();
 }
 
-// Deduplicate a log (provided as a string, split by newlines)
-// Each line is normalized. Duplicate lines are removed and a count is appended.
 function deduplicateLog(log: string): string {
-  const lines = log.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
-  const seen = new Map<string, { original: string; count: number }>();
+  const lines = log.split('\n');
+  const errorCache = new Map<string, { count: number; originalMessage: string }>();
+  const processedLines: string[] = [];
+  let currentErrorBlock: string[] = [];
 
-  for (const line of lines) {
-    const norm = normalizeLine(line);
-    if (seen.has(norm)) {
-      seen.get(norm)!.count++;
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // If empty line or last line, process the current block
+    if (line.trim() === '' || i === lines.length - 1) {
+      if (i === lines.length - 1 && line.trim() !== '') {
+        currentErrorBlock.push(line);
+      }
+
+      if (currentErrorBlock.length > 0) {
+        const originalBlock = currentErrorBlock.join('\n');
+        const normalizedBlock = normalizeErrorMessage(originalBlock);
+
+        if (errorCache.has(normalizedBlock)) {
+          const entry = errorCache.get(normalizedBlock)!;
+          entry.count++;
+        } else {
+          errorCache.set(normalizedBlock, {
+            count: 1,
+            originalMessage: originalBlock
+          });
+          processedLines.push(originalBlock);
+        }
+
+        currentErrorBlock = [];
+      }
+      if (line.trim() === '') {
+        processedLines.push('');
+      }
     } else {
-      seen.set(norm, { original: line, count: 1 });
+      currentErrorBlock.push(line);
     }
   }
 
-  // Reconstruct the deduplicated log.
-  const dedupedLines: string[] = [];
-  for (const { original, count } of seen.values()) {
-    if (count > 1) {
-      dedupedLines.push(`${original} [x${count}]`);
-    } else {
-      dedupedLines.push(original);
+  // Format output with counts
+  const result = processedLines.map(line => {
+    if (!line) return '';
+    const normalized = normalizeErrorMessage(line);
+    const entry = errorCache.get(normalized);
+    if (entry && entry.count > 1) {
+      return `${line} [x${entry.count}]`;
     }
-  }
-  return dedupedLines.join("\n");
+    return line;
+  });
+
+  return result.join('\n');
 }
 
 function downloadTextFile(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/plain" });
+  const blob = new Blob([content], { type: 'text/plain' });
   const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
@@ -137,7 +161,7 @@ export default function Home() {
       return;
     }
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     downloadTextFile(cleanedLog, `cleaned-log-${timestamp}.txt`);
 
     toast({
@@ -214,31 +238,17 @@ export default function Home() {
           </div>
         </Card>
 
-        {dedupedLog && (
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-blue-500" />
-              Deduplicated Log
-            </h2>
-            <ScrollArea className="h-[200px] rounded-md border">
-              <pre className="p-4 font-mono text-sm whitespace-pre-wrap">{dedupedLog}</pre>
-            </ScrollArea>
-          </Card>
-        )}
-
         {dedupedLog && cleanedLog && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-red-500" />
-                Removed Lines (Diff)
+                Removed Lines
               </h2>
               <ScrollArea
                 ref={leftPanelRef}
                 className="h-[400px] rounded-md border"
-                onScroll={(e) =>
-                  rightPanelRef.current && syncScroll(e.currentTarget, rightPanelRef.current)
-                }
+                onScroll={(e) => rightPanelRef.current && syncScroll(e.currentTarget, rightPanelRef.current)}
               >
                 <pre className="p-4 font-mono text-sm">
                   {diffParts.map((part, i) => (
@@ -274,9 +284,7 @@ export default function Home() {
               <ScrollArea
                 ref={rightPanelRef}
                 className="h-[400px] rounded-md border"
-                onScroll={(e) =>
-                  leftPanelRef.current && syncScroll(e.currentTarget, leftPanelRef.current)
-                }
+                onScroll={(e) => leftPanelRef.current && syncScroll(e.currentTarget, leftPanelRef.current)}
               >
                 <pre className="p-4 font-mono text-sm">{cleanedLog}</pre>
               </ScrollArea>
