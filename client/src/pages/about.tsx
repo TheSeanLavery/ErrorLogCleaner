@@ -37,9 +37,9 @@ export default function About() {
             <p>
               Error Log Cleaner is open source software licensed under the MIT License. 
               This means you're free to use, modify, and distribute the software, 
-              subject to the conditions in the license. View the full license on our{" "}
+              subject to the conditions in the license. View the full source code on our{" "}
               <a 
-                href="https://github.com/TheSeanLavery/ErrorLogCleaner/blob/main/LICENSE" 
+                href="https://github.com/TheSeanLavery/ErrorLogCleaner" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="underline"
