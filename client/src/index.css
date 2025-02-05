@@ -11,24 +11,3 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
-
-/* Carbon Ads Styling */
-#carbonads {
-  @apply font-sans text-sm;
-}
-
-#carbonads .carbon-wrap {
-  @apply flex p-2 gap-2;
-}
-
-#carbonads .carbon-img {
-  @apply block;
-}
-
-#carbonads .carbon-text {
-  @apply text-muted-foreground leading-tight mb-2;
-}
-
-#carbonads .carbon-poweredby {
-  @apply text-xs text-muted-foreground/60 block;
-}

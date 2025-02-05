@@ -8,7 +8,6 @@ import { diffLines } from "diff";
 import { Upload, CheckCircle, AlertCircle, Loader2, Download, Copy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { CarbonAd } from "@/components/carbon-ad";
 
 function normalizeErrorMessage(message: string): string {
   return message.replace(/\[[\w\s]+\]/g, '[ID]')
@@ -300,7 +299,6 @@ export default function Home() {
           </div>
         )}
       </div>
-      <CarbonAd />
     </div>
   );
 }
