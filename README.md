@@ -1,5 +1,7 @@
 # Error Log Cleaner
 
+https://errorlogcleaner.com
+
 A powerful error log cleaning and analysis application that provides intelligent log processing with automated deduplication, AI-powered insights, and interactive visualization.
 
 ## Features
